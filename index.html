@@ -137,6 +137,7 @@ const $ = id => document.getElementById(id);
 const ESCALA = 1.5;                       // px de tela por ponto do PDF
 const NITIDEZ = Math.min(2.5, Math.max(2, window.devicePixelRatio || 1));
 const LH = 1.2;                           // altura da linha das caixas
+const DPI = 300;                          // resolução do arquivo baixado
 const ARIAL = 'Arial, Helvetica, sans-serif';
 const TIMES = '"Times New Roman", Times, serif';
 const COURIER = '"Courier New", Courier, monospace';
@@ -250,6 +251,7 @@ function novaPagina(w, h, r, ptW, ptH) {
 
 function paginaEmBranco(w, h) {
   const pag = novaPagina(w, h, 2, w * 0.75, h * 0.75);
+  pag.branca = true;
   const c = contexto(pag);
   c.fillStyle = '#ffffff';
   c.fillRect(0, 0, pag.canvas.width, pag.canvas.height);
@@ -483,6 +485,7 @@ async function abrirPdf(buf) {
     const page = await pdf.getPage(n);
     const vp = page.getViewport({ scale: ESCALA });
     const pag = novaPagina(vp.width, vp.height, NITIDEZ, vp.width / ESCALA, vp.height / ESCALA);
+    pag.pdfPage = page;
     await page.render({ canvasContext: contexto(pag), viewport: vp, transform: [pag.r, 0, 0, pag.r, 0, 0] }).promise;
     const tc = await page.getTextContent();
     for (const it of tc.items) {
@@ -614,12 +617,21 @@ async function abrirArquivo(file) {
 }
 
 /* ---------- exportar ---------- */
-function desenharPagina(pag) {
+// página final em alta resolução: PDF é redesenhado do original a 300 dpi; imagem sai na resolução original
+async function desenharPagina(pag) {
+  const r = pag.pdfPage ? DPI / 72 / ESCALA : pag.branca ? DPI / 96 : pag.r;
   const cv = document.createElement('canvas');
-  cv.width = pag.canvas.width; cv.height = pag.canvas.height;
+  cv.width = Math.round(pag.w * r); cv.height = Math.round(pag.h * r);
   const ctx = cv.getContext('2d');
-  ctx.drawImage(pag.canvas, 0, 0);
-  const r = pag.r;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, cv.width, cv.height);
+  if (pag.pdfPage) {
+    const vp = pag.pdfPage.getViewport({ scale: ESCALA });
+    await pag.pdfPage.render({ canvasContext: ctx, viewport: vp, transform: [r, 0, 0, r, 0, 0] }).promise;
+  } else {
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(pag.canvas, 0, 0, cv.width, cv.height);
+  }
   for (const capa of pag.camada.querySelectorAll('.capa')) {
     ctx.fillStyle = capa.style.backgroundColor;
     ctx.fillRect(parseFloat(capa.style.left) * r, parseFloat(capa.style.top) * r, parseFloat(capa.style.width) * r, parseFloat(capa.style.height) * r);
@@ -658,9 +670,9 @@ async function baixarPdf() {
       const o = pag.ptW > pag.ptH ? 'l' : 'p', fmt = [pag.ptW, pag.ptH];
       if (!doc) doc = new jspdf.jsPDF({ orientation: o, unit: 'pt', format: fmt, compress: true });
       else doc.addPage(fmt, o);
-      doc.addImage(desenharPagina(pag), 'PNG', 0, 0, pag.ptW, pag.ptH, undefined, 'FAST');
+      doc.addImage(await desenharPagina(pag), 'PNG', 0, 0, pag.ptW, pag.ptH, undefined, 'FAST');
     }
-    baixar(doc.output('blob'), nomeArquivo + '-editado.pdf');
+    baixar(pdfSemMetadados(doc), nomeArquivo + '-editado.pdf');
   } catch (e) {
     console.error(e);
     avisar('Não consegui gerar o PDF: ' + ((e && e.message) || e), true);
@@ -669,10 +681,34 @@ async function baixarPdf() {
   }
 }
 
-function baixarImagem() {
-  paginas.forEach((pag, i) => desenharPagina(pag).toBlob(b => {
-    baixar(b, `${nomeArquivo}-editado${paginas.length > 1 ? '-pagina-' + (i + 1) : ''}.png`);
-  }, 'image/png'));
+// apaga o dicionário de informações (programa, data de criação) trocando por espaços, sem mexer nos deslocamentos do arquivo
+function pdfSemMetadados(doc) {
+  let s = doc.output();
+  const i = s.lastIndexOf('/Producer (');
+  if (i >= 0) {
+    const ini = s.lastIndexOf('<<', i) + 2, fim = s.indexOf('>>', i);
+    s = s.slice(0, ini) + ' '.repeat(fim - ini) + s.slice(fim);
+  }
+  const bytes = new Uint8Array(s.length);
+  for (let k = 0; k < s.length; k++) bytes[k] = s.charCodeAt(k) & 0xff;
+  return new Blob([bytes], { type: 'application/pdf' });
+}
+
+async function baixarImagem() {
+  mostrarCarregando('Gerando imagem…');
+  await new Promise(r => setTimeout(r, 30));
+  try {
+    for (let i = 0; i < paginas.length; i++) {
+      const cv = await desenharPagina(paginas[i]);
+      const b = await new Promise(r => cv.toBlob(r, 'image/png'));
+      baixar(b, `${nomeArquivo}-editado${paginas.length > 1 ? '-pagina-' + (i + 1) : ''}.png`);
+    }
+  } catch (e) {
+    console.error(e);
+    avisar('Não consegui gerar a imagem: ' + ((e && e.message) || e), true);
+  } finally {
+    esconderCarregando();
+  }
 }
 
 /* ---------- avisos ---------- */
