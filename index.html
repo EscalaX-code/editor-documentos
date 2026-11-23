@@ -1,0 +1,784 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Editor de Documentos</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<style>
+:root{
+  --fundo:#eceef3;--barra:#121419;--barra-2:#1c1f26;--barra-borda:#2a2e37;--barra-txt:#f3f4f6;--barra-sub:#9aa1ad;
+  --acento:#6d4cff;--acento-forte:#5634f0;--acento-suave:#ece7ff;
+  --card:#ffffff;--borda:#d7dae2;--txt:#1a1d24;--sub:#646b78;--perigo:#d9363e;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%}
+body{display:flex;flex-direction:column;background:var(--fundo);color:var(--txt);font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;overflow:hidden}
+button{font:inherit}
+.topo{display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--barra);color:var(--barra-txt);flex-wrap:wrap}
+.marca{display:flex;align-items:center;gap:10px;font-weight:650;font-size:15px;margin-right:10px;white-space:nowrap}
+.logo{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;background:linear-gradient(140deg,#8f73ff,#5634f0);font-size:13px;font-weight:800;color:#fff}
+.btn{height:34px;padding:0 14px;border-radius:8px;border:1px solid var(--barra-borda);background:var(--barra-2);color:var(--barra-txt);cursor:pointer;white-space:nowrap}
+.btn:hover:not(:disabled){background:#272b34}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.principal{background:var(--acento);border-color:var(--acento);color:#fff}
+.btn.principal:hover:not(:disabled){background:var(--acento-forte)}
+.btn.ligado{background:var(--acento-suave);color:var(--acento-forte);border-color:var(--acento)}
+.btn.quadrado{width:34px;padding:0;font-size:17px}
+.btn.grande{height:42px;padding:0 22px;font-size:15px}
+.zoom{display:flex;align-items:center;gap:6px;margin-left:6px}
+#zoomTxt{min-width:44px;text-align:center;color:var(--barra-sub);font-variant-numeric:tabular-nums}
+.espaco{flex:1}
+.formato{display:flex;align-items:center;gap:8px;padding:8px 16px;background:var(--card);border-bottom:1px solid var(--borda);flex-wrap:wrap;min-height:50px}
+.formato .ctl{transition:opacity .15s}
+.formato.desligado .ctl{opacity:.35;pointer-events:none}
+.formato select,.formato input[type=number]{height:32px;border:1px solid var(--borda);border-radius:7px;padding:0 8px;background:#fff;color:var(--txt);font:inherit}
+.formato select{width:170px}
+.formato input[type=number]{width:72px}
+.cor{display:flex;align-items:center;gap:6px;height:32px;padding:0 4px 0 10px;border:1px solid var(--borda);border-radius:7px;color:var(--sub);font-size:12.5px;cursor:pointer;white-space:nowrap}
+.cor input{width:26px;height:24px;border:0;padding:0;background:none;cursor:pointer}
+.fbtn{height:32px;min-width:32px;padding:0 10px;border:1px solid var(--borda);border-radius:7px;background:#fff;color:var(--txt);cursor:pointer;white-space:nowrap}
+.fbtn:hover:not(:disabled){background:#f4f5f8}
+.fbtn:disabled{opacity:.35;cursor:default}
+.fbtn.ligado{background:var(--acento-suave);border-color:var(--acento);color:var(--acento-forte)}
+.fbtn.perigo{color:var(--perigo)}
+.grupo{display:flex;align-items:center;gap:8px}
+.sep{width:1px;height:22px;background:var(--borda);margin:0 2px}
+.dica{margin-left:auto;color:var(--sub);font-size:12.5px}
+.area{flex:1;overflow:auto;position:relative;padding:28px}
+.paginas{display:flex;flex-direction:column;align-items:safe center;gap:28px}
+.pagina{position:relative;flex:none;background:#fff;box-shadow:0 1px 3px rgba(18,20,25,.08),0 8px 28px rgba(18,20,25,.12)}
+.pagina canvas{display:block}
+.camada{position:absolute;inset:0}
+.camada.adicionar{cursor:crosshair}
+.capa{position:absolute;pointer-events:none;z-index:1}
+.caixa{position:absolute;z-index:2;white-space:pre;line-height:1.2;margin:0;padding:0;outline:none;transform-origin:0 0;caret-color:var(--acento-forte);cursor:text;min-width:3px;border-radius:1px}
+.caixa:hover{box-shadow:0 0 0 1px rgba(109,76,255,.55)}
+.caixa.sel{box-shadow:0 0 0 1.5px var(--acento),0 0 0 4px rgba(109,76,255,.15)}
+.caixa:not(.ativa)::selection{color:transparent;background:rgba(109,76,255,.28)}
+.caixa.ativa::selection{background:rgba(109,76,255,.28)}
+#alca{position:absolute;z-index:5;width:22px;height:22px;border-radius:6px;background:var(--acento);color:#fff;display:none;align-items:center;justify-content:center;cursor:grab;box-shadow:0 2px 8px rgba(0,0,0,.25);touch-action:none;user-select:none}
+#alca:active{cursor:grabbing}
+#alca svg{width:14px;height:14px}
+.vazio{min-height:100%;display:flex;align-items:center;justify-content:center}
+body.com-doc .vazio{display:none}
+.soltar{width:min(560px,100%);padding:44px 36px;border:2px dashed #c3c7d2;border-radius:18px;background:var(--card);text-align:center;transition:border-color .15s,background .15s}
+body.arrastando .soltar{border-color:var(--acento);background:#f7f5ff}
+.soltar svg{width:52px;height:52px;color:var(--acento)}
+.soltar h1{font-size:22px;margin:14px 0 8px}
+.soltar p{margin:0 0 20px;color:var(--sub)}
+.soltar .mini{margin:16px 0 0;font-size:12.5px}
+.cobrir-arquivo{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;background:rgba(109,76,255,.12);border:3px dashed var(--acento);font-size:20px;font-weight:650;color:var(--acento-forte);pointer-events:none}
+body.arrastando.com-doc .cobrir-arquivo{display:flex}
+.carregando{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;background:rgba(236,238,243,.72);backdrop-filter:blur(2px)}
+.painel{display:flex;align-items:center;gap:12px;padding:16px 22px;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(18,20,25,.18);font-weight:550}
+.giro{width:18px;height:18px;border-radius:50%;border:2.5px solid var(--acento-suave);border-top-color:var(--acento);animation:g .8s linear infinite}
+@keyframes g{to{transform:rotate(360deg)}}
+.aviso{position:fixed;left:50%;bottom:24px;z-index:50;transform:translate(-50%,20px);opacity:0;padding:11px 18px;border-radius:10px;background:var(--barra);color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.25);transition:.2s;pointer-events:none;max-width:calc(100% - 32px)}
+.aviso.mostrar{opacity:1;transform:translate(-50%,0)}
+.aviso.erro{background:var(--perigo)}
+</style>
+</head>
+<body>
+<header class="topo">
+  <div class="marca"><span class="logo">E</span>Editor de Documentos</div>
+  <button class="btn principal" id="bAbrir">Abrir arquivo</button>
+  <button class="btn" id="bTexto" disabled title="Clique e depois clique no documento">+ Texto</button>
+  <div class="zoom">
+    <button class="btn quadrado" id="bMenos" disabled title="Diminuir">−</button>
+    <span id="zoomTxt">100%</span>
+    <button class="btn quadrado" id="bMais" disabled title="Aumentar">+</button>
+  </div>
+  <div class="espaco"></div>
+  <button class="btn" id="bPng" disabled>Baixar imagem</button>
+  <button class="btn principal" id="bPdf" disabled>Baixar PDF</button>
+  <input type="file" id="arquivo" accept="application/pdf,image/*,.txt,text/plain" hidden>
+</header>
+
+<div class="formato desligado" id="formato">
+  <select id="fFonte" class="ctl" title="Fonte"></select>
+  <input type="number" id="fTamanho" class="ctl" min="2" max="400" step="0.5" title="Tamanho da letra">
+  <label class="cor ctl" title="Cor do texto">Cor <input type="color" id="fCor"></label>
+  <button class="fbtn ctl" id="fNegrito" title="Negrito (Ctrl+B)"><b>B</b></button>
+  <button class="fbtn ctl" id="fItalico" title="Itálico (Ctrl+I)"><i>I</i></button>
+  <span class="grupo" id="rFundo">
+    <span class="sep"></span>
+    <label class="cor ctl" title="Cor que cobre o texto original">Cobrir com <input type="color" id="fFundo"></label>
+  </span>
+  <span class="sep"></span>
+  <button class="fbtn ctl" id="fRestaurar">Restaurar original</button>
+  <button class="fbtn ctl perigo" id="fApagar">Apagar</button>
+  <span class="dica" id="dica"></span>
+</div>
+
+<main class="area" id="area">
+  <div class="vazio">
+    <div class="soltar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 11v6M9.5 14.5 12 17l2.5-2.5"/></svg>
+      <h1>Arraste seu documento aqui</h1>
+      <p>PDF, imagem (PNG ou JPG) ou arquivo de texto.<br>Também dá para colar um print com Ctrl+V.</p>
+      <button class="btn principal grande" id="bAbrir2">Escolher arquivo</button>
+      <p class="mini">Depois é só clicar em qualquer texto para editar.</p>
+    </div>
+  </div>
+  <div class="paginas" id="paginas"></div>
+</main>
+
+<div class="cobrir-arquivo">Solte para abrir</div>
+<div class="carregando" id="carregando" hidden><div class="painel"><span class="giro"></span><span id="carregandoTxt">Abrindo…</span></div></div>
+<div class="aviso" id="aviso"></div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const ESCALA = 1.5;                       // px de tela por ponto do PDF
+const NITIDEZ = Math.min(2.5, Math.max(2, window.devicePixelRatio || 1));
+const LH = 1.2;                           // altura da linha das caixas
+const ARIAL = 'Arial, Helvetica, sans-serif';
+const TIMES = '"Times New Roman", Times, serif';
+const COURIER = '"Courier New", Courier, monospace';
+const FONTES = [
+  ['Arial', ARIAL], ['Helvetica', 'Helvetica, Arial, sans-serif'], ['Verdana', 'Verdana, Geneva, sans-serif'],
+  ['Trebuchet MS', '"Trebuchet MS", sans-serif'], ['Times New Roman', TIMES], ['Georgia', 'Georgia, serif'], ['Courier New', COURIER]
+];
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let paginas = [];
+let zoom = 1;
+let selecionada = null;
+let modoAdicionar = false;
+let nomeArquivo = 'documento';
+let estiloPadrao = { fonte: ARIAL, tamanho: 16, cor: '#111111', negrito: false, italico: false };
+const dados = new WeakMap();
+const medidor = document.createElement('canvas').getContext('2d');
+const basesFonte = new Map();
+
+const alca = document.createElement('div');
+alca.id = 'alca';
+alca.title = 'Arraste para mover';
+alca.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20M9 5l3-3 3 3M9 19l3 3 3-3M5 9l-3 3 3 3M19 9l3 3-3 3"/></svg>';
+
+for (const [nome, css] of FONTES) $('fFonte').add(new Option(nome, css));
+
+/* ---------- utilidades ---------- */
+const hex = c => '#' + c.map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+const estiloFonte = (p, k = 1) => `${p.italico ? 'italic ' : ''}${p.negrito ? 700 : 400} ${p.tamanho * k}px ${p.fonte}`;
+const textoDe = c => c.innerText.replace(/\n$/, '');
+const contexto = pag => pag.canvas.getContext('2d', { willReadFrequently: true });
+
+function medir(texto, p) { medidor.font = estiloFonte(p); return medidor.measureText(texto).width; }
+
+// distância do topo da caixa até a linha de base, em "em"
+function baseDe(fonte) {
+  if (!basesFonte.has(fonte)) {
+    medidor.font = `100px ${fonte}`;
+    const m = medidor.measureText('Hg');
+    const a = m.fontBoundingBoxAscent, d = m.fontBoundingBoxDescent;
+    basesFonte.set(fonte, a ? (LH - (a + d) / 100) / 2 + a / 100 : 0.95);
+  }
+  return basesFonte.get(fonte);
+}
+
+function ajustarLargura(p, largura) {
+  const m = medir(p.texto, p);
+  p.sx = m > 0 && largura > 0 ? Math.min(2.5, Math.max(0.4, largura / m)) : 1;
+}
+
+function manterBase(p, fn) {
+  const lb = p.y + baseDe(p.fonte) * p.tamanho;
+  fn();
+  p.y = lb - baseDe(p.fonte) * p.tamanho;
+}
+
+// cor do fundo (borda da área) e cor do texto (pixels mais distantes do fundo)
+function amostrar(pag, q) {
+  const r = pag.r, cv = pag.canvas, ctx = contexto(pag);
+  const X = Math.max(0, Math.floor((q.x - 2) * r)), Y = Math.max(0, Math.floor((q.y - 2) * r));
+  const X2 = Math.min(cv.width, Math.ceil((q.x + q.w + 2) * r)), Y2 = Math.min(cv.height, Math.ceil((q.y + q.h + 2) * r));
+  const W = X2 - X, H = Y2 - Y;
+  if (W < 3 || H < 3) return { fundo: '#ffffff', cor: '#000000' };
+  const d = ctx.getImageData(X, Y, W, H).data;
+  const m = Math.max(1, Math.round(r));
+  const grupos = new Map();
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    if (i >= m && j >= m && i < W - m && j < H - m) continue;
+    const o = (j * W + i) * 4;
+    const k = (d[o] >> 4) << 8 | (d[o + 1] >> 4) << 4 | (d[o + 2] >> 4);
+    const g = grupos.get(k) || [0, 0, 0, 0];
+    g[0]++; g[1] += d[o]; g[2] += d[o + 1]; g[3] += d[o + 2];
+    grupos.set(k, g);
+  }
+  let melhor = null;
+  for (const g of grupos.values()) if (!melhor || g[0] > melhor[0]) melhor = g;
+  const f = melhor ? [melhor[1] / melhor[0], melhor[2] / melhor[0], melhor[3] / melhor[0]] : [255, 255, 255];
+  const n = W * H, dist = new Float32Array(n);
+  let max = 0;
+  for (let i = 0; i < n; i++) {
+    const o = i * 4;
+    const v = Math.abs(d[o] - f[0]) + Math.abs(d[o + 1] - f[1]) + Math.abs(d[o + 2] - f[2]);
+    dist[i] = v; if (v > max) max = v;
+  }
+  const s = [0, 0, 0]; let c = 0;
+  if (max > 40) for (let i = 0; i < n; i++) if (dist[i] >= max * 0.6) { const o = i * 4; s[0] += d[o]; s[1] += d[o + 1]; s[2] += d[o + 2]; c++; }
+  const lum = 0.299 * f[0] + 0.587 * f[1] + 0.114 * f[2];
+  const cor = c ? [s[0] / c, s[1] / c, s[2] / c] : (lum > 128 ? [0, 0, 0] : [255, 255, 255]);
+  return { fundo: hex(f), cor: hex(cor) };
+}
+
+/* ---------- páginas e caixas ---------- */
+function novaPagina(w, h, r, ptW, ptH) {
+  const el = document.createElement('div');
+  el.className = 'pagina';
+  el.style.width = w + 'px'; el.style.height = h + 'px';
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(w * r)); canvas.height = Math.max(1, Math.round(h * r));
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  const camada = document.createElement('div');
+  camada.className = 'camada' + (modoAdicionar ? ' adicionar' : '');
+  el.append(canvas, camada);
+  $('paginas').appendChild(el);
+  const pag = { el, canvas, camada, w, h, r: canvas.width / w, ptW, ptH };
+  camada.addEventListener('pointerdown', e => cliqueNaCamada(e, pag));
+  paginas.push(pag);
+  document.body.classList.add('com-doc');
+  for (const id of ['bTexto', 'bMenos', 'bMais', 'bPng', 'bPdf']) $(id).disabled = false;
+  return pag;
+}
+
+function paginaEmBranco(w, h) {
+  const pag = novaPagina(w, h, 2, w * 0.75, h * 0.75);
+  const c = contexto(pag);
+  c.fillStyle = '#ffffff';
+  c.fillRect(0, 0, pag.canvas.width, pag.canvas.height);
+  return pag;
+}
+
+function criarCaixa(pag, p) {
+  p.pagina = pag;
+  p.ativa = !!p.nova;
+  if (!p.sx) p.sx = 1;
+  p.inicial = { x: p.x, y: p.y, fonte: p.fonte, tamanho: p.tamanho, negrito: !!p.negrito, italico: !!p.italico, sx: p.sx, texto: p.texto };
+  const c = document.createElement('div');
+  c.className = 'caixa' + (p.ativa ? ' ativa' : '');
+  c.contentEditable = 'true';
+  c.spellcheck = false;
+  c.textContent = p.texto;
+  dados.set(c, p);
+  aplicar(c);
+  pag.camada.appendChild(c);
+  c.addEventListener('focus', () => selecionar(c));
+  c.addEventListener('input', () => { ativar(c); posicionarAlca(); });
+  c.addEventListener('keydown', teclaNaCaixa);
+  c.addEventListener('paste', e => {
+    e.preventDefault();
+    document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
+  });
+  return c;
+}
+
+function aplicar(c) {
+  const p = dados.get(c), s = c.style;
+  s.left = p.x + 'px'; s.top = p.y + 'px';
+  s.fontFamily = p.fonte; s.fontSize = p.tamanho + 'px';
+  s.fontWeight = p.negrito ? '700' : '400';
+  s.fontStyle = p.italico ? 'italic' : 'normal';
+  s.color = p.ativa ? p.cor : 'transparent';
+  s.transform = p.sx !== 1 ? `scaleX(${p.sx})` : '';
+  if (p.capa) p.capa.style.background = p.fundo;
+}
+
+function garantirAmostra(p) {
+  if (p.cor && p.fundo) return;
+  const a = p.cobrir ? amostrar(p.pagina, p.cobrir) : { cor: '#111111', fundo: '#ffffff' };
+  p.cor = p.cor || a.cor;
+  p.fundo = p.fundo || a.fundo;
+}
+
+// a partir da primeira mudança, o texto original é coberto e a caixa passa a mostrar o texto novo
+function ativar(c) {
+  const p = dados.get(c);
+  if (p.ativa) return;
+  garantirAmostra(p);
+  p.ativa = true;
+  c.classList.add('ativa');
+  if (!p.nova && p.cobrir) {
+    const capa = document.createElement('div');
+    capa.className = 'capa';
+    Object.assign(capa.style, { left: p.cobrir.x + 'px', top: p.cobrir.y + 'px', width: p.cobrir.w + 'px', height: p.cobrir.h + 'px' });
+    p.pagina.camada.insertBefore(capa, p.pagina.camada.firstChild);
+    p.capa = capa;
+  }
+  aplicar(c);
+}
+
+/* ---------- seleção e barra de formato ---------- */
+function selecionar(c) {
+  if (modoAdicionar) definirModoAdicionar(false);
+  if (selecionada === c) return;
+  if (selecionada) selecionada.classList.remove('sel');
+  selecionada = c;
+  c.classList.add('sel');
+  garantirAmostra(dados.get(c));
+  sincronizarBarra();
+  posicionarAlca();
+}
+
+function desselecionar() {
+  if (selecionada) {
+    selecionada.classList.remove('sel');
+    if (document.activeElement === selecionada) selecionada.blur();
+  }
+  selecionada = null;
+  alca.style.display = 'none';
+  sincronizarBarra();
+}
+
+function sincronizarBarra() {
+  const p = selecionada && dados.get(selecionada);
+  $('formato').classList.toggle('desligado', !p);
+  if (!p) {
+    $('dica').textContent = paginas.length ? 'Clique em qualquer texto do documento para editar.' : 'Abra um documento para começar.';
+    return;
+  }
+  const sel = $('fFonte');
+  if (![...sel.options].some(o => o.value === p.fonte)) sel.add(new Option(p.fonte.split(',')[0].replace(/"/g, ''), p.fonte));
+  sel.value = p.fonte;
+  $('fTamanho').value = String(Math.round(p.tamanho * 10) / 10);
+  $('fCor').value = p.cor;
+  $('fFundo').value = p.fundo;
+  $('fNegrito').classList.toggle('ligado', !!p.negrito);
+  $('fItalico').classList.toggle('ligado', !!p.italico);
+  $('rFundo').hidden = !!p.nova;
+  $('fRestaurar').disabled = !!p.nova;
+  $('dica').textContent = 'Digite para editar · arraste ✥ para mover · Esc para sair';
+}
+
+function posicionarAlca() {
+  if (!selecionada) { alca.style.display = 'none'; return; }
+  const p = dados.get(selecionada);
+  if (alca.parentNode !== p.pagina.camada) p.pagina.camada.appendChild(alca);
+  alca.style.display = 'flex';
+  if (p.x >= 28) {
+    alca.style.left = (p.x - 27) + 'px';
+    alca.style.top = (p.y + p.tamanho * LH / 2 - 11) + 'px';
+  } else {
+    alca.style.left = p.x + 'px';
+    alca.style.top = (p.y - 27) + 'px';
+  }
+}
+
+function mudar(fn) {
+  const c = selecionada;
+  if (!c) return;
+  ativar(c);
+  const p = dados.get(c);
+  fn(p);
+  aplicar(c);
+  posicionarAlca();
+  estiloPadrao = { fonte: p.fonte, tamanho: p.tamanho, cor: p.cor, negrito: p.negrito, italico: p.italico };
+}
+
+function alternar(k) { mudar(p => { p[k] = !p[k]; }); sincronizarBarra(); }
+
+function restaurar() {
+  const c = selecionada;
+  if (!c) return;
+  const p = dados.get(c);
+  if (p.nova) return;
+  const { texto, ...resto } = p.inicial;
+  Object.assign(p, resto);
+  c.textContent = texto;
+  if (p.capa) { p.capa.remove(); p.capa = null; }
+  p.ativa = false;
+  c.classList.remove('ativa');
+  p.cor = p.fundo = null;
+  garantirAmostra(p);
+  aplicar(c);
+  posicionarAlca();
+  sincronizarBarra();
+}
+
+function apagar() {
+  const c = selecionada;
+  if (!c) return;
+  ativar(c);
+  desselecionar();
+  c.remove();
+}
+
+function teclaNaCaixa(e) {
+  if (e.key === 'Escape') { e.preventDefault(); desselecionar(); return; }
+  if (e.key === 'Enter') { e.preventDefault(); document.execCommand('insertLineBreak'); return; }
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'b' || e.key === 'i')) {
+    e.preventDefault();
+    alternar(e.key === 'b' ? 'negrito' : 'italico');
+  }
+}
+
+function cliqueNaCamada(e, pag) {
+  if (e.target !== pag.camada) return;
+  if (!modoAdicionar) { desselecionar(); return; }
+  e.preventDefault();
+  const r = pag.camada.getBoundingClientRect();
+  const x = (e.clientX - r.left) / zoom, y = (e.clientY - r.top) / zoom;
+  const s = estiloPadrao;
+  const c = criarCaixa(pag, { texto: 'Digite aqui', x, y: y - s.tamanho * LH / 2, tamanho: s.tamanho, fonte: s.fonte, cor: s.cor, fundo: '#ffffff', negrito: s.negrito, italico: s.italico, nova: true });
+  definirModoAdicionar(false);
+  setTimeout(() => {
+    c.focus();
+    const rg = document.createRange();
+    rg.selectNodeContents(c);
+    const sel = getSelection();
+    sel.removeAllRanges();
+    sel.addRange(rg);
+  }, 0);
+}
+
+function definirModoAdicionar(v) {
+  modoAdicionar = v;
+  $('bTexto').classList.toggle('ligado', v);
+  for (const p of paginas) p.camada.classList.toggle('adicionar', v);
+  if (v) { desselecionar(); $('dica').textContent = 'Clique no documento onde quer colocar o texto.'; }
+  else sincronizarBarra();
+}
+
+/* ---------- zoom ---------- */
+function definirZoom(z) {
+  zoom = Math.min(4, Math.max(0.2, z));
+  $('paginas').style.zoom = zoom;
+  $('zoomTxt').textContent = Math.round(zoom * 100) + '%';
+}
+
+function ajustarZoom() {
+  if (!paginas.length) return;
+  const maior = Math.max(...paginas.map(p => p.w));
+  definirZoom(Math.min(1, ($('area').clientWidth - 56) / maior));
+}
+
+/* ---------- abrir arquivos ---------- */
+function fontePdf(page, tc, nomeInterno) {
+  let obj = null;
+  try { if (page.commonObjs.has(nomeInterno)) obj = page.commonObjs.get(nomeInterno); } catch (_) { /* fonte ainda não carregada */ }
+  const nome = (obj && obj.name) || '';
+  const tudo = nome + ' ' + ((tc.styles[nomeInterno] || {}).fontFamily || '');
+  let fonte = ARIAL;
+  if (/courier|mono/i.test(tudo)) fonte = COURIER;
+  else if (/times|georgia|garamond|roman|serif/i.test(tudo) && !/sans/i.test(tudo)) fonte = TIMES;
+  return {
+    fonte,
+    negrito: /bold|black|heavy|semibold|demi/i.test(nome) || !!(obj && (obj.bold || obj.black)),
+    italico: /italic|oblique/i.test(nome) || !!(obj && obj.italic)
+  };
+}
+
+async function abrirPdf(buf) {
+  if (!window.pdfjsLib) throw new Error('o leitor de PDF não carregou (sem internet?)');
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let textos = 0;
+  for (let n = 1; n <= pdf.numPages; n++) {
+    mostrarCarregando(`Abrindo página ${n} de ${pdf.numPages}…`);
+    const page = await pdf.getPage(n);
+    const vp = page.getViewport({ scale: ESCALA });
+    const pag = novaPagina(vp.width, vp.height, NITIDEZ, vp.width / ESCALA, vp.height / ESCALA);
+    await page.render({ canvasContext: contexto(pag), viewport: vp, transform: [pag.r, 0, 0, pag.r, 0, 0] }).promise;
+    const tc = await page.getTextContent();
+    for (const it of tc.items) {
+      if (!it.str || !it.str.trim()) continue;
+      const tx = pdfjsLib.Util.transform(vp.transform, it.transform);
+      if (Math.abs(tx[1]) > 1e-3 * Math.abs(tx[0]) || Math.abs(tx[2]) > 1e-3 * Math.abs(tx[3])) continue; // texto girado
+      const tamanho = Math.hypot(tx[2], tx[3]);
+      if (tamanho < 2) continue;
+      const f = fontePdf(page, tc, it.fontName);
+      const largura = it.width * ESCALA, linhaBase = tx[5];
+      const p = { texto: it.str, x: tx[4], tamanho, fonte: f.fonte, negrito: f.negrito, italico: f.italico };
+      p.y = linhaBase - baseDe(p.fonte) * tamanho;
+      ajustarLargura(p, largura);
+      p.cobrir = { x: tx[4] - 1, y: linhaBase - tamanho * 0.93 - 1, w: largura + 2, h: tamanho * 1.18 + 2 };
+      criarCaixa(pag, p);
+      textos++;
+    }
+  }
+  // PDF escaneado (só imagem): lê o texto de cada página
+  if (!textos) for (const pag of paginas) {
+    const n = await lerTextoDaImagem(pag);
+    if (n < 0) return n;
+    textos += n;
+  }
+  return textos;
+}
+
+async function abrirImagem(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const W = img.naturalWidth, H = img.naturalHeight;
+    const w = Math.max(700, Math.min(W, 1000)), h = H * w / W;
+    const cw = Math.min(4000, Math.max(W, Math.round(w * 2)));
+    const pag = novaPagina(w, h, cw / w, w * 0.75, h * 0.75);
+    contexto(pag).drawImage(img, 0, 0, pag.canvas.width, pag.canvas.height);
+    ajustarZoom();
+    return await lerTextoDaImagem(pag);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function lerTextoDaImagem(pag) {
+  if (!window.Tesseract) return -1;
+  mostrarCarregando('Lendo o texto da imagem…');
+  const worker = await Tesseract.createWorker('por', 1, {
+    logger: m => { if (m.status === 'recognizing text') mostrarCarregando(`Lendo o texto da imagem… ${Math.round(m.progress * 100)}%`); }
+  });
+  let total = 0;
+  try {
+    const { data } = await worker.recognize(pag.canvas);
+    const linhas = data.lines || (data.blocks || []).flatMap(b => (b.paragraphs || []).flatMap(q => q.lines || []));
+    const k = 1 / pag.r;
+    for (const l of linhas) {
+      const texto = (l.text || '').replace(/\s+$/, '');
+      if (!texto.trim() || (l.confidence ?? 100) < 35) continue;
+      const b = l.bbox, x0 = b.x0 * k, y0 = b.y0 * k, x1 = b.x1 * k, y1 = b.y1 * k;
+      if (x1 - x0 < 3 || y1 - y0 < 3) continue;
+      let base = l.baseline && l.baseline.has_baseline !== false ? (l.baseline.y0 + l.baseline.y1) / 2 * k : NaN;
+      if (!(base > y0 + (y1 - y0) * 0.4 && base <= y1 + 1)) base = y1 - (y1 - y0) * 0.2;
+      const tamanho = Math.max(6, Math.min((base - y0) / 0.72, (y1 - y0) * 1.05));
+      const p = { texto, x: x0, tamanho, fonte: ARIAL, negrito: false, italico: false };
+      p.y = base - baseDe(ARIAL) * tamanho;
+      ajustarLargura(p, x1 - x0);
+      p.cobrir = { x: x0 - 2, y: y0 - 2, w: x1 - x0 + 4, h: y1 - y0 + 4 };
+      criarCaixa(pag, p);
+      total++;
+    }
+  } finally {
+    await worker.terminate();
+  }
+  return total;
+}
+
+function abrirTexto(txt) {
+  const linhas = String(txt).replace(/\r\n?/g, '\n').split('\n');
+  const w = 794, h = 1123, m = 64, t = 15, passo = t * 1.6;
+  let pag = null, y = 0;
+  for (const linha of linhas) {
+    if (!pag || y + passo > h - m) { pag = paginaEmBranco(w, h); y = m; }
+    if (linha.trim()) criarCaixa(pag, { texto: linha, x: m, y, tamanho: t, fonte: ARIAL, cor: '#111111', fundo: '#ffffff', nova: true });
+    y += passo;
+  }
+  if (!pag) paginaEmBranco(w, h);
+}
+
+function limpar() {
+  desselecionar();
+  definirModoAdicionar(false);
+  paginas = [];
+  $('paginas').replaceChildren();
+  document.body.classList.remove('com-doc');
+  for (const id of ['bTexto', 'bMenos', 'bMais', 'bPng', 'bPdf']) $(id).disabled = true;
+  sincronizarBarra();
+}
+
+async function abrirArquivo(file) {
+  if (!file) return;
+  limpar();
+  nomeArquivo = (file.name || 'documento').replace(/\.[^.]+$/, '') || 'documento';
+  mostrarCarregando('Abrindo…');
+  try {
+    const nome = file.name || '', tipo = file.type || '';
+    let msg = 'Pronto. Clique em qualquer texto para editar.';
+    if (tipo === 'application/pdf' || /\.pdf$/i.test(nome)) {
+      const n = await abrirPdf(await file.arrayBuffer());
+      if (n === 0) msg = 'Não achei texto nesse PDF. Use "+ Texto" para escrever por cima.';
+      if (n < 0) msg = 'O leitor de texto de imagem não carregou. Use "+ Texto" para escrever por cima.';
+    } else if (tipo.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp)$/i.test(nome)) {
+      const n = await abrirImagem(file);
+      if (n === 0) msg = 'Não achei texto nessa imagem. Use "+ Texto" para escrever por cima.';
+      if (n < 0) msg = 'O leitor de texto de imagem não carregou. Use "+ Texto" para escrever por cima.';
+    } else {
+      abrirTexto(await file.text());
+    }
+    ajustarZoom();
+    sincronizarBarra();
+    avisar(msg);
+  } catch (e) {
+    console.error(e);
+    limpar();
+    avisar('Não consegui abrir esse arquivo: ' + ((e && e.message) || e), true);
+  } finally {
+    esconderCarregando();
+  }
+}
+
+/* ---------- exportar ---------- */
+function desenharPagina(pag) {
+  const cv = document.createElement('canvas');
+  cv.width = pag.canvas.width; cv.height = pag.canvas.height;
+  const ctx = cv.getContext('2d');
+  ctx.drawImage(pag.canvas, 0, 0);
+  const r = pag.r;
+  for (const capa of pag.camada.querySelectorAll('.capa')) {
+    ctx.fillStyle = capa.style.backgroundColor;
+    ctx.fillRect(parseFloat(capa.style.left) * r, parseFloat(capa.style.top) * r, parseFloat(capa.style.width) * r, parseFloat(capa.style.height) * r);
+  }
+  for (const c of pag.camada.querySelectorAll('.caixa.ativa')) {
+    const p = dados.get(c), b = baseDe(p.fonte);
+    ctx.save();
+    ctx.fillStyle = p.cor;
+    ctx.font = estiloFonte(p, r);
+    ctx.textBaseline = 'alphabetic';
+    ctx.translate(p.x * r, p.y * r);
+    ctx.scale(p.sx, 1);
+    textoDe(c).split('\n').forEach((l, i) => ctx.fillText(l, 0, (b + i * LH) * p.tamanho * r));
+    ctx.restore();
+  }
+  return cv;
+}
+
+function baixar(blob, nome) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = nome;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+async function baixarPdf() {
+  if (!window.jspdf) { avisar('O gerador de PDF não carregou (sem internet?).', true); return; }
+  mostrarCarregando('Gerando PDF…');
+  await new Promise(r => setTimeout(r, 30));
+  try {
+    let doc = null;
+    for (const pag of paginas) {
+      const o = pag.ptW > pag.ptH ? 'l' : 'p', fmt = [pag.ptW, pag.ptH];
+      if (!doc) doc = new jspdf.jsPDF({ orientation: o, unit: 'pt', format: fmt, compress: true });
+      else doc.addPage(fmt, o);
+      doc.addImage(desenharPagina(pag), 'PNG', 0, 0, pag.ptW, pag.ptH, undefined, 'FAST');
+    }
+    baixar(doc.output('blob'), nomeArquivo + '-editado.pdf');
+  } catch (e) {
+    console.error(e);
+    avisar('Não consegui gerar o PDF: ' + ((e && e.message) || e), true);
+  } finally {
+    esconderCarregando();
+  }
+}
+
+function baixarImagem() {
+  paginas.forEach((pag, i) => desenharPagina(pag).toBlob(b => {
+    baixar(b, `${nomeArquivo}-editado${paginas.length > 1 ? '-pagina-' + (i + 1) : ''}.png`);
+  }, 'image/png'));
+}
+
+/* ---------- avisos ---------- */
+function mostrarCarregando(t) { $('carregandoTxt').textContent = t; $('carregando').hidden = false; }
+function esconderCarregando() { $('carregando').hidden = true; }
+let tempoAviso;
+function avisar(t, erro = false) {
+  const a = $('aviso');
+  a.textContent = t;
+  a.classList.toggle('erro', erro);
+  a.classList.add('mostrar');
+  clearTimeout(tempoAviso);
+  tempoAviso = setTimeout(() => a.classList.remove('mostrar'), erro ? 6000 : 3500);
+}
+
+/* ---------- eventos ---------- */
+$('bAbrir').onclick = $('bAbrir2').onclick = () => $('arquivo').click();
+$('arquivo').onchange = e => { abrirArquivo(e.target.files[0]); e.target.value = ''; };
+$('bTexto').onclick = () => definirModoAdicionar(!modoAdicionar);
+$('bMenos').onclick = () => definirZoom(zoom / 1.2);
+$('bMais').onclick = () => definirZoom(zoom * 1.2);
+$('bPng').onclick = baixarImagem;
+$('bPdf').onclick = baixarPdf;
+
+for (const b of document.querySelectorAll('.fbtn')) b.addEventListener('mousedown', e => e.preventDefault());
+$('fFonte').addEventListener('change', e => mudar(p => manterBase(p, () => { p.fonte = e.target.value; })));
+$('fTamanho').addEventListener('input', e => {
+  const v = parseFloat(e.target.value);
+  if (v >= 2 && v <= 400) mudar(p => manterBase(p, () => { p.tamanho = v; }));
+});
+$('fCor').addEventListener('input', e => mudar(p => { p.cor = e.target.value; }));
+$('fFundo').addEventListener('input', e => mudar(p => { p.fundo = e.target.value; }));
+$('fNegrito').addEventListener('click', () => alternar('negrito'));
+$('fItalico').addEventListener('click', () => alternar('italico'));
+$('fRestaurar').addEventListener('click', restaurar);
+$('fApagar').addEventListener('click', apagar);
+
+alca.addEventListener('mousedown', e => e.preventDefault());
+alca.addEventListener('pointerdown', e => {
+  if (!selecionada) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const c = selecionada, p = dados.get(c);
+  ativar(c);
+  const x0 = e.clientX, y0 = e.clientY, px = p.x, py = p.y;
+  alca.setPointerCapture(e.pointerId);
+  const mover = ev => { p.x = px + (ev.clientX - x0) / zoom; p.y = py + (ev.clientY - y0) / zoom; aplicar(c); posicionarAlca(); };
+  const soltar = () => {
+    alca.removeEventListener('pointermove', mover);
+    alca.removeEventListener('pointerup', soltar);
+    alca.removeEventListener('pointercancel', soltar);
+  };
+  alca.addEventListener('pointermove', mover);
+  alca.addEventListener('pointerup', soltar);
+  alca.addEventListener('pointercancel', soltar);
+});
+
+$('area').addEventListener('pointerdown', e => {
+  if (e.target.closest('.caixa, #alca, .camada')) return;
+  desselecionar();
+});
+$('area').addEventListener('wheel', e => {
+  if (!e.ctrlKey || !paginas.length) return;
+  e.preventDefault();
+  definirZoom(zoom * Math.exp(-e.deltaY * 0.01));
+}, { passive: false });
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (modoAdicionar) definirModoAdicionar(false); else desselecionar();
+});
+
+document.addEventListener('paste', e => {
+  if (e.target.closest && e.target.closest('.caixa')) return;
+  const ativo = document.activeElement;
+  if (ativo && /^(INPUT|SELECT|TEXTAREA)$/.test(ativo.tagName)) return;
+  const itens = [...((e.clipboardData && e.clipboardData.items) || [])];
+  const arq = itens.find(i => i.kind === 'file');
+  if (arq) {
+    const f = arq.getAsFile();
+    if (f) { e.preventDefault(); abrirArquivo(new File([f], 'print.' + ((f.type.split('/')[1]) || 'png'), { type: f.type })); }
+    return;
+  }
+  const t = e.clipboardData && e.clipboardData.getData('text/plain');
+  if (t && !paginas.length) { e.preventDefault(); abrirArquivo(new File([t], 'texto.txt', { type: 'text/plain' })); }
+});
+
+const temArquivo = e => [...((e.dataTransfer && e.dataTransfer.types) || [])].includes('Files');
+let profundidade = 0;
+window.addEventListener('dragenter', e => { if (!temArquivo(e)) return; e.preventDefault(); profundidade++; document.body.classList.add('arrastando'); });
+window.addEventListener('dragover', e => { if (temArquivo(e)) e.preventDefault(); });
+window.addEventListener('dragleave', e => {
+  if (!temArquivo(e)) return;
+  profundidade = Math.max(0, profundidade - 1);
+  if (!profundidade) document.body.classList.remove('arrastando');
+});
+window.addEventListener('drop', e => {
+  if (!temArquivo(e)) return;
+  e.preventDefault();
+  profundidade = 0;
+  document.body.classList.remove('arrastando');
+  abrirArquivo(e.dataTransfer.files[0]);
+});
+
+sincronizarBarra();
+definirZoom(1);
+</script>
+</body>
+</html>
